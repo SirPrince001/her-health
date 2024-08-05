@@ -7,7 +7,7 @@ const getCoordinatesFromCity = require("../utils/location"); // Path to geocodin
 
 exports.createUser = async (request, response, next) => {
   try {
-    let { fullName, email, password, age, gender, city, phone } = request.body;
+    let { fullName, email, password, age, gender, state , city, phone } = request.body;
 
     // Validate input
     if (
@@ -16,6 +16,7 @@ exports.createUser = async (request, response, next) => {
       !password ||
       !age ||
       !gender ||
+      !state ||
       !city ||
       !phone
     ) {
@@ -51,6 +52,7 @@ exports.createUser = async (request, response, next) => {
       password,
       age,
       gender,
+      state,
       city,
       phone,
       location: {
