@@ -1,0 +1,55 @@
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema(
+  {
+    fullName: {
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    password: {
+      type: String,
+      required: true,
+    },
+    phone: {
+      type: String,
+      required: true,
+      match: /^\+\d{10,15}$/, // Ensure the phone number is in international format
+    },
+
+    age: {
+      type: Number,
+      required: true,
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female", "other"],
+      required: true,
+    },
+    city: {
+      type: String,
+      required: true,
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        required: true,
+      },
+      coordinates: {
+        type: [Number],
+        required: true,
+      },
+    },
+  },
+  { timestamps: true }
+);
+
+// Create a 2dsphere index for geospatial queries
+userSchema.index({ location: "2dsphere" });
+
+module.exports = mongoose.model("User", userSchema);
