@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       enum: ["male", "female", "other"],
       required: true,
     },
+    state: {
+      type: String,
+      required: true,
+    },
     city: {
       type: String,
       required: true,
