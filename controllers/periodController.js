@@ -1,9 +1,8 @@
-const express = require('express');
-const moment = require('moment');
-const Period = require('../models/period')
-const twilio = require('twilio');
-const {ValidationError , NotFoundError} = require('../helper/error')
-
+const express = require("express");
+const moment = require("moment");
+const Period = require("../models/period");
+const sendSMS = require("../utils/sendSMS");
+const { ValidationError, NotFoundError } = require("../helper/error");
 
 // Calculate menstruation and ovulation dates
 const calculateDates = (lastPeriodDate) => {
@@ -20,14 +19,15 @@ const calculateDates = (lastPeriodDate) => {
   };
 };
 
-
 // Endpoint to receive last period date and send SMS
 exports.calculatePeriod = async (request, response, next) => {
   try {
     const { lastPeriodDate, phoneNumber } = request.body;
 
     if (!lastPeriodDate || !phoneNumber) {
-      return response.status(400).json({ error: "Please provide lastPeriodDate and phoneNumber" });
+      return response
+        .status(400)
+        .json({ error: "Please provide lastPeriodDate and phoneNumber" });
     }
 
     // Save or update user data
@@ -45,39 +45,14 @@ exports.calculatePeriod = async (request, response, next) => {
     const savedUser = await user.save();
     return response.status(200).json({
       success: true,
-      message: 'Period data saved successfully',
-      data: savedUser
+      message: "Period data saved successfully",
+      data: savedUser,
     });
-
   } catch (error) {
     next(error); // Pass the error to the next error handling middleware
   }
 
-
-
-
-  
   // Send SMS reminder
-  // const message = `Your next period is expected to start on ${nextPeriod}. Your ovulation date is ${ovulationDate}.`;
-
-  // client.messages.create({
-  //   body: message,
-  //   from: twilioPhoneNumber,
-  //   to: phoneNumber
-  // }).then(() => {
-  //   res.status(200).json({
-  //     success: true,
-  //     message: 'Reminder sent successfully!',
-  //     nextPeriod: nextPeriod,
-  //     ovulationDate: ovulationDate
-  //   });
-  // }).catch((error) => {
-  //   res.status(500).json({
-  //     success: false,
-  //     error: 'Failed to send SMS',
-  //     details: error.message
-  //   });
-  // });
+  const message = `Your next period is expected to start on ${nextPeriod}. Your ovulation date is ${ovulationDate}.`;
+  sendSMS(phoneNumber, message);
 };
-
-

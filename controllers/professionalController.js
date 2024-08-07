@@ -81,7 +81,9 @@ exports.createProfessional = async (req, res, next) => {
       profession,
       specialty,
       clinicOrGym,
+      state,
       city,
+      address,
       bio,
       experienceYears,
     } = req.body;
@@ -95,7 +97,9 @@ exports.createProfessional = async (req, res, next) => {
       !profession ||
       !specialty ||
       !clinicOrGym ||
+      !state ||
       !city ||
+      !address ||
       !bio ||
       !experienceYears
     ) {
@@ -123,7 +127,9 @@ exports.createProfessional = async (req, res, next) => {
       profession,
       specialty,
       clinicOrGym,
+      state,
       city,
+      address,
       location: {
         type: "Point",
         coordinates: [coordinates.longitude, coordinates.latitude], // GeoJSON coordinates: [longitude, latitude]
