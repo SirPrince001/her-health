@@ -30,26 +30,23 @@ const ProfessionalSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  state:{
+  state: {
     type: String,
     required: true,
-   
   },
   city: {
     type: String,
     required: true,
   },
-  address:{
+  address: {
     type: String,
     required: true,
   },
   latitude: {
     type: Number,
-  
   },
   longitude: {
     type: Number,
-  
   },
   location: {
     type: {
@@ -72,6 +69,12 @@ const ProfessionalSchema = new mongoose.Schema({
   },
   profileImage: {
     type: String,
+  },
+  resetPasswordToken: {
+    type: String,
+  },
+  resetTokenExpires: {
+    type: Date,
   },
   createdAt: {
     type: Date,

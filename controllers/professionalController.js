@@ -5,6 +5,7 @@ const cloudinary = require("../cloudinary/cloudinary");
 const User = require("../models/user");
 const axios = require("axios");
 const { ValidationError, NotFoundError } = require("../helper/error");
+const nodemailer = require('../utils/nodemailer')
 require("dotenv").config();
 
 //search for professional by speacialty,City, geolocation
@@ -223,4 +224,96 @@ exports.uploadImage = async (req, res, next) => {
       return next(error);
     }
   });
+};
+
+//forget password
+exports.forgetPassword = async (request, response, next) => {
+  try {
+    const { email } = request.body;
+    console.log("Received Email:", email);
+    // Check if user exists
+    const user = await Professional.findOne({ email });
+
+    console.log("User found:", user);
+
+    if (!user) {
+      console.log("No user found with the given ID number.");
+      return response
+        .status(400)
+        .send(`No user found with the given ID number ${email}.`);
+    }
+
+    // Remove any existing reset token for this user
+     await ResetPasswordToken.deleteMany({ user: user._id });
+
+    // Generate a unique reset token
+    const token = crypto.randomBytes(20).toString("hex");
+    console.log("Generated reset token:", token);
+    // Set reset token and expiration in the user document
+    user.resetPasswordToken = token;
+    user.resetTokenExpires = Date.now() + 3600000;
+    await user.save();
+
+    // Send an email with the reset link
+    const resetUrl = `${process.env.WEB_URL}/reset-password?token=${token}`;
+    // Ensure nodemailer is properly configured
+    nodemailer({
+      to: user.email,
+      subject: "Reset Password ",
+      text: `Click this link to reset your password: ${resetUrl}`,
+    });
+
+    return response
+      .status(200)
+      .json({
+        success: true,
+        response_message: `Password reset email sent to your email ${user.email}`,
+      });
+  } catch (error) {
+    console.error("Error in forgetPassword endpoint:", error.message);
+    next(error);
+  }
+};
+
+
+// Endpoint to reset the password
+exports.resetPassword = async (request, response, next) => {
+  const { token, newPassword, confirmPassword } = request.body;
+  console.log('Reset token:', token);
+
+  // Check if new password and confirm password match
+  if (newPassword !== confirmPassword) {
+    return response.status(400).send('Passwords do not match');
+  }
+
+  try {
+    // Find the user with the reset token and check if it is valid
+    const user = await Professional.findOne({
+      resetPasswordToken: token,
+      resetTokenExpires: { $gt: Date.now() }, // Token has not expired
+    }).exec();
+
+    console.log('User found for password reset:', user);
+
+    if (!user) {
+      console.log('Invalid or expired reset token.');
+      return response.status(400).send('Invalid or expired token');
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Set new password and clear reset token
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+
+    return response
+      .status(200)
+      .json({ success: true, response_message: `${user.firstName} your password has been reset successfully`});
+  } catch (error) {
+    console.error('Error in resetPassword endpoint:', error);
+    next(error);
+  }
 };
