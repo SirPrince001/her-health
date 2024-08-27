@@ -1,6 +1,5 @@
-require('dotenv').config();
-const nodemailer = require('nodemailer');
-
+require("dotenv").config();
+const nodemailer = require("nodemailer");
 
 async function mailer(to, subject, text) {
   try {
@@ -8,7 +7,7 @@ async function mailer(to, subject, text) {
     let transporter = nodemailer.createTransport({
       host: process.env.HOST_SMTP,
       port: process.env.PORT_SMTP,
-      secure: true,
+      secure: false,
       auth: {
         user: process.env.USERNAME_SMTP,
         pass: process.env.PASSWORD_SMTP,
@@ -23,10 +22,10 @@ async function mailer(to, subject, text) {
       from: `${process.env.APP_NAME} <${process.env.USERNAME}>`,
       to,
       subject,
-      html:text ,
+      text,
     });
 
-    console.log('Email sent: ' + info.response);
+    console.log("Email sent: " + info.response);
   } catch (error) {
     console.log(error);
   }

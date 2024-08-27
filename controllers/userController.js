@@ -2,13 +2,14 @@ const User = require("../models/user");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { ValidationError, NotFoundError } = require("../helper/error");
-const nodemailer = require('../utils/nodemailer')
-
+const mailer = require("../utils/nodemailer");
+const crypto = require("crypto");
 const getCoordinatesFromCity = require("../utils/location"); // Path to geocoding service
 
 exports.createUser = async (request, response, next) => {
   try {
-    let { fullName, email, password, age, gender, state , city, phone } = request.body;
+    let { fullName, email, password, age, gender, state, city, phone } =
+      request.body;
 
     // Validate input
     if (
@@ -74,7 +75,7 @@ exports.createUser = async (request, response, next) => {
       data: savedUser,
     });
   } catch (error) {
-    console.log(error)
+    console.log(error);
     next(error);
   }
 };
@@ -119,57 +120,55 @@ exports.forgetPassword = async (request, response, next) => {
     console.log("Received Email:", email);
     // Check if user exists
     const user = await User.findOne({ email });
-
-    console.log("User found:", user);
+    console.log("User email found:", user.email);
+    console.log(user)
 
     if (!user) {
       console.log("No user found with the given ID number.");
       return response
         .status(400)
-        .send(`No user found with the given ID number ${email}.`);
+        .json({
+          response_message: `No user found with the given ID number ${email}.`,
+        });
     }
-
-    // Remove any existing reset token for this user
-     await ResetPasswordToken.deleteMany({ user: user._id });
 
     // Generate a unique reset token
     const token = crypto.randomBytes(20).toString("hex");
     console.log("Generated reset token:", token);
     // Set reset token and expiration in the user document
-    user.resetPasswordToken = token;
-    user.resetTokenExpires = Date.now() + 3600000;
-    await user.save();
+      await User.findByIdAndUpdate(user._id, {
+        resetPasswordToken: token,
+        resetTokenExpires: Date.now() + 3600000, // 1 hour from now
+      }, {new:true});
+  
 
     // Send an email with the reset link
     const resetUrl = `${process.env.WEB_URL}/reset-password?token=${token}`;
-    // Ensure nodemailer is properly configured
-    nodemailer({
-      to: user.email,
-      subject: "Reset Password ",
-      text: `Click this link to reset your password: ${resetUrl}`,
+    
+    mailer(
+      user.email,
+       "Reset Password ",
+       `Click this link to reset your password: ${resetUrl}`,
+    );
+    
+    return response.status(200).json({
+      success: true,
+      response_message: `Password reset email sent to your email ${user.email}`,
     });
-
-    return response
-      .status(200)
-      .json({
-        success: true,
-        response_message: `Password reset email sent to your email ${user.email}`,
-      });
   } catch (error) {
     console.error("Error in forgetPassword endpoint:", error.message);
     next(error);
   }
 };
 
-
 // Endpoint to reset the password
 exports.resetPassword = async (request, response, next) => {
   const { token, newPassword, confirmPassword } = request.body;
-  console.log('Reset token:', token);
+  console.log("Reset token:", token);
 
   // Check if new password and confirm password match
   if (newPassword !== confirmPassword) {
-    return response.status(400).send('Passwords do not match');
+    return response.status(400).send("Passwords do not match");
   }
 
   try {
@@ -179,11 +178,11 @@ exports.resetPassword = async (request, response, next) => {
       resetTokenExpires: { $gt: Date.now() }, // Token has not expired
     }).exec();
 
-    console.log('User found for password reset:', user);
+    console.log("User found for password reset:", user);
 
     if (!user) {
-      console.log('Invalid or expired reset token.');
-      return response.status(400).send('Invalid or expired token');
+      console.log("Invalid or expired reset token.");
+      return response.status(400).send("Invalid or expired token");
     }
 
     // Hash the new password
@@ -197,9 +196,12 @@ exports.resetPassword = async (request, response, next) => {
 
     return response
       .status(200)
-      .json({ success: true, response_message: `${user.firstName} your password has been reset successfully`});
+      .json({
+        success: true,
+        response_message: `${user.firstName} your password has been reset successfully`,
+      });
   } catch (error) {
-    console.error('Error in resetPassword endpoint:', error);
+    console.error("Error in resetPassword endpoint:", error);
     next(error);
   }
 };
