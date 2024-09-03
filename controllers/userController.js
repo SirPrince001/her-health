@@ -8,8 +8,18 @@ const getCoordinatesFromCity = require("../utils/location"); // Path to geocodin
 
 exports.createUser = async (request, response, next) => {
   try {
-    let { fullName, email, password, age, gender, state, city, phone } =
-      request.body;
+    let {
+      fullName,
+      email,
+      password,
+      age,
+      gender,
+      state,
+      city,
+      phone,
+      latitude,
+      longitude,
+    } = request.body;
 
     // Validate input
     if (
@@ -20,9 +30,13 @@ exports.createUser = async (request, response, next) => {
       !gender ||
       !state ||
       !city ||
-      !phone
+      !phone ||
+      !latitude ||
+      !longitude
     ) {
-      throw new ValidationError("All fields are required");
+      throw new ValidationError(
+        "All fields are required, including latitude and longitude"
+      );
     }
 
     // Check if email already exists
@@ -41,9 +55,6 @@ exports.createUser = async (request, response, next) => {
       );
     }
 
-    // Get coordinates from city
-    const { longitude, latitude } = await getCoordinatesFromCity(city);
-
     // Hash password
     password = bcryptjs.hashSync(password, 10);
 
@@ -59,7 +70,7 @@ exports.createUser = async (request, response, next) => {
       phone,
       location: {
         type: "Point",
-        coordinates: [{ longitude: longitude, latitude: latitude }],
+        coordinates: [longitude, latitude], // Longitude first, then latitude
       },
     });
 
@@ -75,7 +86,6 @@ exports.createUser = async (request, response, next) => {
       data: savedUser,
     });
   } catch (error) {
-    console.log(error);
     next(error);
   }
 };
