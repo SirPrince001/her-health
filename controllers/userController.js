@@ -30,12 +30,10 @@ exports.createUser = async (request, response, next) => {
       !gender ||
       !state ||
       !city ||
-      !phone ||
-      !latitude ||
-      !longitude
+      !phone
     ) {
       throw new ValidationError(
-        "All fields are required, including latitude and longitude"
+        "All fields are required"
       );
     }
 
@@ -68,10 +66,12 @@ exports.createUser = async (request, response, next) => {
       state,
       city,
       phone,
-      location: {
-        type: "Point",
-        coordinates: [longitude, latitude], // Longitude first, then latitude
-      },
+      longitude: longitude,
+      latitude: latitude,
+      // location: {
+      //   type: "Point",
+      //   coordinates: [longitude, latitude], // Longitude first, then latitude
+      // },
     });
 
     let savedUser = await user.save();
@@ -131,36 +131,37 @@ exports.forgetPassword = async (request, response, next) => {
     // Check if user exists
     const user = await User.findOne({ email });
     console.log("User email found:", user.email);
-    console.log(user)
+    console.log(user);
 
     if (!user) {
       console.log("No user found with the given ID number.");
-      return response
-        .status(400)
-        .json({
-          response_message: `No user found with the given ID number ${email}.`,
-        });
+      return response.status(400).json({
+        response_message: `No user found with the given ID number ${email}.`,
+      });
     }
 
     // Generate a unique reset token
     const token = crypto.randomBytes(20).toString("hex");
     console.log("Generated reset token:", token);
     // Set reset token and expiration in the user document
-      await User.findByIdAndUpdate(user._id, {
+    await User.findByIdAndUpdate(
+      user._id,
+      {
         resetPasswordToken: token,
         resetTokenExpires: Date.now() + 3600000, // 1 hour from now
-      }, {new:true});
-  
+      },
+      { new: true }
+    );
 
     // Send an email with the reset link
     const resetUrl = `${process.env.WEB_URL}/reset-password?token=${token}`;
-    
+
     mailer(
       user.email,
-       "Reset Password ",
-       `Click this link to reset your password: ${resetUrl}`,
+      "Reset Password ",
+      `Click this link to reset your password: ${resetUrl}`
     );
-    
+
     return response.status(200).json({
       success: true,
       response_message: `Password reset email sent to your email ${user.email}`,
@@ -204,12 +205,10 @@ exports.resetPassword = async (request, response, next) => {
     user.resetTokenExpires = undefined;
     await user.save();
 
-    return response
-      .status(200)
-      .json({
-        success: true,
-        response_message: `${user.firstName} your password has been reset successfully`,
-      });
+    return response.status(200).json({
+      success: true,
+      response_message: `${user.firstName} your password has been reset successfully`,
+    });
   } catch (error) {
     console.error("Error in resetPassword endpoint:", error);
     next(error);

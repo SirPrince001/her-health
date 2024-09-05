@@ -38,16 +38,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    location: {
-      type: {
-        type: String,
-        enum: ["Point"],
+    // location: {
+    //   type: {
+    //     type: String,
+    //     enum: ["Point"],
         
-      },
-      coordinates: {
-        type: [Number],
+    //   },
+    //   coordinates: {
+    //     type: [Number],
         
-      },
+    //   },
+    // },
+    latitude:{
+      type: Number,
+    },
+    longitude:{
+      type: Number,
     },
     resetPasswordToken: {
       type: String,
