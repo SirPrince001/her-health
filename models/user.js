@@ -38,6 +38,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    interests:{
+      type:[String],
+      required:true
+    },
     // location: {
     //   type: {
     //     type: String,

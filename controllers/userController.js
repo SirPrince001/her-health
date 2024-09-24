@@ -5,6 +5,7 @@ const { ValidationError, NotFoundError } = require("../helper/error");
 const mailer = require("../utils/nodemailer");
 const crypto = require("crypto");
 const getCoordinatesFromCity = require("../utils/location"); // Path to geocoding service
+const Mongoose = require("mongoose");
 
 exports.createUser = async (request, response, next) => {
   try {
@@ -16,6 +17,7 @@ exports.createUser = async (request, response, next) => {
       gender,
       state,
       city,
+      interests,
       phone,
       latitude,
       longitude,
@@ -30,11 +32,10 @@ exports.createUser = async (request, response, next) => {
       !gender ||
       !state ||
       !city ||
+      !interests ||
       !phone
     ) {
-      throw new ValidationError(
-        "All fields are required"
-      );
+      throw new ValidationError("All fields are required");
     }
 
     // Check if email already exists
@@ -65,6 +66,7 @@ exports.createUser = async (request, response, next) => {
       gender,
       state,
       city,
+      interests,
       phone,
       longitude: longitude,
       latitude: latitude,
@@ -117,6 +119,27 @@ exports.loginUser = async (request, response, next) => {
       success: true,
       response_message: `User ${user.fullName} logged in successfully`,
       data: { token },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+//endpoint for user profile
+exports.userProfile = async (request, response, next) => {
+  try {
+    const userId = request.user.id;
+    if (!userId || !Mongoose.isValidObjectId(userId)) {
+      throw new ValidationError("Invalid User ID");
+    }
+    const user_profile = await User.findById(userId);
+    if (!user_profile) {
+      throw new NotFoundError(`User with this ID ${userId} not found`);
+    }
+
+    return response.status(200).json({
+      success: true,
+      response_message: `User ${user_profile.fullName} profile retrieved successfully`,
     });
   } catch (error) {
     next(error);
