@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const formidable = require("formidable");
 const cloudinary = require("../cloudinary/cloudinary");
 const User = require("../models/user");
-const axios = require("axios");
+const jwt = require('jsonwebtoken')
 const { ValidationError, NotFoundError } = require("../helper/error");
 const nodemailer = require('../utils/nodemailer')
 require("dotenv").config();
@@ -69,8 +69,7 @@ exports.searchProfessionals = async (req, res, next) => {
   }
 };
 
-//sample
-// controllers/professionalController.js
+
 
 exports.createProfessional = async (req, res, next) => {
   try {
@@ -86,6 +85,8 @@ exports.createProfessional = async (req, res, next) => {
       city,
       address,
       bio,
+      longitude,
+      latitude,
       experienceYears,
     } = req.body;
 
@@ -116,9 +117,6 @@ exports.createProfessional = async (req, res, next) => {
     // Hash password
     password = bcrypt.hashSync(password, 10);
 
-    // Fetch coordinates using city name
-    const coordinates = await getCoordinates(city);
-
     // Create new professional with geolocation
     const newProfessional = new Professional({
       fullName,
@@ -131,10 +129,12 @@ exports.createProfessional = async (req, res, next) => {
       state,
       city,
       address,
-      location: {
-        type: "Point",
-        coordinates: [coordinates.longitude, coordinates.latitude], // GeoJSON coordinates: [longitude, latitude]
-      },
+      longitude:longitude,
+      latitude:latitude,
+      // location: {
+      //   type: "Point",
+      //   coordinates: [coordinates.longitude, coordinates.latitude], // GeoJSON coordinates: [longitude, latitude]
+      // },
       bio,
       experienceYears,
     });
@@ -157,28 +157,40 @@ exports.createProfessional = async (req, res, next) => {
   }
 };
 
-// function to get user coordinates
 
-async function getCoordinates(city) {
+
+exports.loginProfessional = async (request, response, next) => {
   try {
-    const apiKey = process.env.MAP_API_KEY;
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-      city
-    )}&key=${apiKey}`;
-
-    const response = await axios.get(url);
-    const { results } = response.data;
-
-    if (results && results.length > 0) {
-      const { lat, lng } = results[0].geometry.location;
-      return { latitude: lat, longitude: lng };
-    } else {
-      throw new Error("Coordinates not found for the city");
+    let { email, password } = request.body;
+    //validate input
+    if (!email || !password) {
+      throw new ValidationError("Email and password are required");
     }
+    //check if email exists
+    const user = await Professional.findOne({ email });
+    if (!user) {
+      throw new NotFoundError(`User with email ${user.email} not found`);
+    }
+    //compare password
+    const isMatch = bcrypt.compareSync(password, user.password);
+    if (!isMatch) {
+      throw new ValidationError("Invalid email or password");
+    }
+    // create payload
+    const payload = { userId: user._id };
+    //generate and send jwt token
+    const token = jwt.sign({ payload }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    response.json({
+      success: true,
+      response_message: `User ${user.fullName} logged in successfully`,
+      data: { token },
+    });
   } catch (error) {
-    throw new Error(`Error fetching coordinates: ${error.message}`);
+    next(error);
   }
-}
+};
 
 //update professional profile image using formidable
 exports.uploadImage = async (req, res, next) => {
@@ -317,3 +329,48 @@ exports.resetPassword = async (request, response, next) => {
     next(error);
   }
 };
+
+// Get all professionals sorted by most recent
+exports.getAllProfessionals = async (request, response, next) => {
+  try {
+    const professionals = await Professional.find({}).sort({ createdAt: -1 }); 
+    response.status(200).json({ 
+      success: true, 
+      response_message: 'Fetched All Professionals Successfully', 
+      data: professionals 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Profile professional using login token
+exports.getProfessionalProfile = async (request, response, next) => {
+  try {
+    // Assuming you're using a middleware to verify the token and attach the professional's ID to the request
+    const { professionalId } = request.user;  // Extract professionalId from the token (attached by auth middleware)
+
+    if (!professionalId) {
+      throw new ValidationError("Professional ID is missing from the token");
+    }
+
+    const professional = await Professional.findById(professionalId);
+
+    if (!professional) {
+      throw new NotFoundError(`Professional not found with ID ${professionalId}`);
+    }
+
+    // Convert Mongoose document to plain object, excluding sensitive fields
+    const { password, ...result } = professional.toObject();
+
+    response.status(200).json({
+      success: true,
+      response_message: `Fetched Professional profile successfully`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

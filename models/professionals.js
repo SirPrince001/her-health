@@ -48,17 +48,17 @@ const ProfessionalSchema = new mongoose.Schema({
   longitude: {
     type: Number,
   },
-  location: {
-    type: {
-      type: String,
-      enum: ["Point"],
-      default: "Point",
-    },
-    coordinates: {
-      type: [Number],
-      index: "2dsphere", // Index for geospatial queries
-    },
-  },
+  // location: {
+  //   type: {
+  //     type: String,
+  //     enum: ["Point"],
+  //     default: "Point",
+  //   },
+  //   coordinates: {
+  //     type: [Number],
+  //     index: "2dsphere", // Index for geospatial queries
+  //   },
+  // },
   bio: {
     type: String,
     required: true,
