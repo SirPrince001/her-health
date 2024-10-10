@@ -19,7 +19,7 @@ const ProfessionalSchema = new mongoose.Schema({
   },
   profession: {
     type: String,
-    enum: ["doctor", "dietitian", "fitnessCoach"],
+    enum: ["Doctor", "Dietitian", "Coach"],
     required: true,
   },
   specialty: {

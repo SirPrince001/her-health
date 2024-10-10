@@ -69,7 +69,14 @@ exports.searchProfessionals = async (req, res, next) => {
   }
 };
 
-
+// Helper to format the fullName to sentence case
+const formatProfession = (profession) => {
+  return profession
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
 
 exports.createProfessional = async (req, res, next) => {
   try {
@@ -107,6 +114,8 @@ exports.createProfessional = async (req, res, next) => {
     ) {
       return res.status(400).json({ error: "All fields are required" });
     }
+    // Format fullName to sentence case
+    const formattedProfession = formatProfession(profession);
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,14 +132,14 @@ exports.createProfessional = async (req, res, next) => {
       email,
       password,
       phone,
-      profession,
+      profession : formattedProfession,
       specialty,
       clinicOrGym,
       state,
       city,
       address,
-      longitude:longitude,
-      latitude:latitude,
+      longitude: longitude,
+      latitude: latitude,
       // location: {
       //   type: "Point",
       //   coordinates: [coordinates.longitude, coordinates.latitude], // GeoJSON coordinates: [longitude, latitude]
