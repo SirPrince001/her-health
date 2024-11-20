@@ -1,5 +1,7 @@
 const User = require("../models/user");
 const bcryptjs = require("bcryptjs");
+const formidable = require("formidable");
+const cloudinary = require("../cloudinary/cloudinary");
 const jwt = require("jsonwebtoken");
 const { ValidationError, NotFoundError } = require("../helper/error");
 const mailer = require("../utils/nodemailer");
@@ -9,7 +11,7 @@ const Mongoose = require("mongoose");
 
 exports.createUser = async (request, response, next) => {
   try {
-    let {
+    const {
       fullName,
       email,
       password,
@@ -21,9 +23,10 @@ exports.createUser = async (request, response, next) => {
       phone,
       latitude,
       longitude,
+      date_of_birth,
     } = request.body;
 
-    // Validate input
+    // Validate required fields
     if (
       !fullName ||
       !email ||
@@ -33,7 +36,8 @@ exports.createUser = async (request, response, next) => {
       !state ||
       !city ||
       !interests ||
-      !phone
+      !phone ||
+      !date_of_birth
     ) {
       throw new ValidationError("All fields are required");
     }
@@ -55,37 +59,42 @@ exports.createUser = async (request, response, next) => {
     }
 
     // Hash password
-    password = bcryptjs.hashSync(password, 10);
+    const hashedPassword = bcryptjs.hashSync(password, 10);
 
-    // Create user with location
+    // Create the user
     const user = new User({
       fullName,
       email,
-      password,
+      password: hashedPassword,
       age,
       gender,
       state,
       city,
       interests,
       phone,
-      longitude: longitude,
-      latitude: latitude,
-      // location: {
-      //   type: "Point",
-      //   coordinates: [longitude, latitude], // Longitude first, then latitude
-      // },
+      longitude,
+      latitude,
+      date_of_birth,
     });
 
     let savedUser = await user.save();
 
-    // Result and exclude password
+    // Generate a JWT token for the user
+    const token = jwt.sign(
+      { id: savedUser._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" } // Token expiration time
+    );
+
+    // Convert savedUser to JSON and exclude password
     savedUser = savedUser.toJSON();
     delete savedUser.password;
 
     response.status(201).json({
       success: true,
-      response_message: `User ${user.fullName} created successfully`,
+      response_message: `User ${savedUser.fullName} created successfully`,
       data: savedUser,
+      token, // Include token in the response
     });
   } catch (error) {
     next(error);
@@ -128,18 +137,21 @@ exports.loginUser = async (request, response, next) => {
 //endpoint for user profile
 exports.userProfile = async (request, response, next) => {
   try {
-    const userId = request.user.id;
-    if (!userId || !Mongoose.isValidObjectId(userId)) {
-      throw new ValidationError("Invalid User ID");
-    }
-    const user_profile = await User.findById(userId);
-    if (!user_profile) {
-      throw new NotFoundError(`User with this ID ${userId} not found`);
-    }
+    const user = request.user;
+    
+    // if (!userId || !Mongoose.isValidObjectId(userId)) {
+    //   throw new ValidationError("Invalid User ID");
+    // }
+    // const user_profile = await User.findById(userId);
+    // console.log(user_profile)
+    // if (!user_profile) {
+    //   throw new NotFoundError(`User with this ID ${userId} not found`);
+    // }
 
     return response.status(200).json({
       success: true,
-      response_message: `User ${user_profile.fullName} profile retrieved successfully`,
+      response_message: `User ${user.fullName} profile retrieved successfully`,
+      data:user
     });
   } catch (error) {
     next(error);
@@ -235,5 +247,89 @@ exports.resetPassword = async (request, response, next) => {
   } catch (error) {
     console.error("Error in resetPassword endpoint:", error);
     next(error);
+  }
+};
+
+exports.uploadImage = async (req, res, next) => {
+  try {
+    // Extract user or professional details from the request
+    const { user } = req;
+
+    if (!user || !Mongoose.isValidObjectId(user._id)) {
+      throw new ValidationError(
+        "User or Professional ID is required or invalid."
+      );
+    }
+
+    // Initialize formidable to parse form-data
+     const form = new formidable.IncomingForm();
+
+    form.parse(req, async (err, fields, files) => {
+      if (err) {
+        console.error("Formidable error:", err);
+        return next(new ValidationError("Error parsing form data."));
+      }
+
+      console.log("Parsed fields:", fields);
+      console.log("Parsed files:", files);
+
+      // Extract profile image file
+      const profileImage = Array.isArray(files.profileImage)
+        ? files.profileImage[0]
+        : files.profileImage;
+
+      if (!profileImage?.filepath) {
+        return next(new ValidationError("Profile image file is missing."));
+      }
+
+      // Validate file type
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+      if (!allowedTypes.includes(profileImage.mimetype)) {
+        return next(
+          new ValidationError("Invalid file type. Please upload an image.")
+        );
+      }
+
+      try {
+        // Upload image to Cloudinary
+        const imageResult = await cloudinary.uploader.upload(
+          profileImage.filepath,
+          {
+            folder: "profile-images",
+          }
+        );
+
+        console.log("Uploaded Image URL:", imageResult.secure_url);
+
+        // Update user's profile image
+        const updatedUser = await User.findByIdAndUpdate(
+          user._id,
+          { profileImage: imageResult.secure_url },
+          { new: true }
+        );
+
+        if (!updatedUser) {
+          throw new NotFoundError(`User not found with ID ${user._id}`);
+        }
+
+        // Exclude sensitive data (e.g., password) from response
+        const { password, ...result } = updatedUser.toObject();
+
+        // Respond with success
+        return res.status(200).json({
+          success: true,
+          response_message: `Profile image updated successfully`,
+          result,
+        });
+      } catch (uploadError) {
+        console.error("Cloudinary upload error:", uploadError);
+        return next(
+          new ValidationError("Error uploading image to Cloudinary.")
+        );
+      }
+    });
+  } catch (error) {
+    console.error("Error in uploadImage controller:", error);
+    return next(error);
   }
 };
