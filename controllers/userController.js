@@ -138,7 +138,7 @@ exports.loginUser = async (request, response, next) => {
 exports.userProfile = async (request, response, next) => {
   try {
     const user = request.user;
-    
+
     // if (!userId || !Mongoose.isValidObjectId(userId)) {
     //   throw new ValidationError("Invalid User ID");
     // }
@@ -151,7 +151,7 @@ exports.userProfile = async (request, response, next) => {
     return response.status(200).json({
       success: true,
       response_message: `User ${user.fullName} profile retrieved successfully`,
-      data:user
+      data: user,
     });
   } catch (error) {
     next(error);
@@ -162,79 +162,84 @@ exports.userProfile = async (request, response, next) => {
 exports.forgetPassword = async (request, response, next) => {
   try {
     const { email } = request.body;
-    console.log("Received Email:", email);
+
     // Check if user exists
     const user = await User.findOne({ email });
-    console.log("User email found:", user.email);
-    console.log(user);
-
     if (!user) {
-      console.log("No user found with the given ID number.");
-      return response.status(400).json({
-        response_message: `No user found with the given ID number ${email}.`,
+      return response.status(404).json({
+        success: false,
+        response_message: `No user found with the email ${email}.`,
       });
     }
 
     // Generate a unique reset token
-    const token = crypto.randomBytes(20).toString("hex");
-    console.log("Generated reset token:", token);
-    // Set reset token and expiration in the user document
-    await User.findByIdAndUpdate(
-      user._id,
-      {
-        resetPasswordToken: token,
-        resetTokenExpires: Date.now() + 3600000, // 1 hour from now
-      },
-      { new: true }
-    );
+    const resetToken = crypto.randomBytes(20).toString("hex");
 
-    // Send an email with the reset link
-    const resetUrl = `${process.env.WEB_URL}/reset-password?token=${token}`;
+    // Hash the token and set expiry
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    const tokenExpiry = Date.now() + 3600000; // 1 hour from now
 
-    mailer(
+    // Update user with reset token and expiration
+    user.resetPasswordToken = hashedToken;
+    user.resetTokenExpires = tokenExpiry;
+    await user.save();
+
+    // Construct reset URL
+    const resetUrl = `${process.env.WEB_URL}/reset-password?token=${resetToken}`;
+
+    // Send email
+    await mailer(
       user.email,
-      "Reset Password ",
-      `Click this link to reset your password: ${resetUrl}`
+      "Password Reset Request",
+      `You requested to reset your password. Click the link below to proceed:\n\n${resetUrl}\n\nIf you did not make this request, please ignore this email.`
     );
 
     return response.status(200).json({
       success: true,
-      response_message: `Password reset email sent to your email ${user.email}`,
+      response_message: `Password reset email sent to ${user.email}.`,
     });
   } catch (error) {
     console.error("Error in forgetPassword endpoint:", error.message);
-    next(error);
+    next(error); // Pass the error to a global error handler
   }
 };
 
 // Endpoint to reset the password
 exports.resetPassword = async (request, response, next) => {
   const { token, newPassword, confirmPassword } = request.body;
-  console.log("Reset token:", token);
 
-  // Check if new password and confirm password match
+  // Validate passwords match
   if (newPassword !== confirmPassword) {
-    return response.status(400).send("Passwords do not match");
+    return response.status(400).json({
+      success: false,
+      response_message: "Passwords do not match.",
+    });
   }
 
   try {
-    // Find the user with the reset token and check if it is valid
-    const user = await User.findOne({
-      resetPasswordToken: token,
-      resetTokenExpires: { $gt: Date.now() }, // Token has not expired
-    }).exec();
+    // Hash the provided token for comparison
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
-    console.log("User found for password reset:", user);
+    // Find the user with the hashed token and check token expiry
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetTokenExpires: { $gt: Date.now() }, // Token has not expired
+    });
 
     if (!user) {
-      console.log("Invalid or expired reset token.");
-      return response.status(400).send("Invalid or expired token");
+      return response.status(400).json({
+        success: false,
+        response_message: "Invalid or expired token.",
+      });
     }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Set new password and clear reset token
+    // Update the user's password and clear reset token
     user.password = hashedPassword;
     user.resetPasswordToken = undefined;
     user.resetTokenExpires = undefined;
@@ -242,14 +247,13 @@ exports.resetPassword = async (request, response, next) => {
 
     return response.status(200).json({
       success: true,
-      response_message: `${user.firstName} your password has been reset successfully`,
+      response_message: `${user.firstName}, your password has been reset successfully.`,
     });
   } catch (error) {
-    console.error("Error in resetPassword endpoint:", error);
-    next(error);
+    console.error("Error in resetPassword endpoint:", error.message);
+    next(error); // Pass the error to a global error handler
   }
 };
-
 exports.uploadImage = async (req, res, next) => {
   try {
     // Extract user or professional details from the request
@@ -262,7 +266,7 @@ exports.uploadImage = async (req, res, next) => {
     }
 
     // Initialize formidable to parse form-data
-     const form = new formidable.IncomingForm();
+    const form = new formidable.IncomingForm();
 
     form.parse(req, async (err, fields, files) => {
       if (err) {

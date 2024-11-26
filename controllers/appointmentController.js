@@ -2,77 +2,72 @@ const Appointment = require("../models/appointment");
 const { ValidationError } = require("../helper/error");
 
 
-// Create appointment without email notification
-exports.createAppointment = async (req, res, next) => {
+const ProfessionalAvailability = require("../models/available");
+
+exports.bookAppointment = async (req, res, next) => {
   try {
-    const { professional, user, date, duration, status, time, reason } =
-      req.body;
+    const { userId, professionalId, date, timeSlot } = req.body;
 
-    // Validate input fields
-    if (
-      !professional ||
-      !professional.name ||
-      !professional.profession ||
-      !professional.specialty ||
-      !professional.clinicOrGym ||
-      !user ||
-      !user.name ||
-      !user.email ||
-      !user.phone ||
-      !user.age ||
-      !date ||
-      !duration ||
-      !status ||
-      !time ||
-      !reason
-    ) {
-      throw new ValidationError("All fields are required");
+    // Validate inputs
+    if (!userId || !professionalId || !date || !timeSlot) {
+      throw new ValidationError(
+        "User, professional, date, and time slot are required."
+      );
     }
 
-    // Validate and parse the time string to a Date object
-    const parsedTime = new Date(time);
-    if (isNaN(parsedTime.getTime())) {
-      throw new ValidationError("Invalid date format for time");
-    }
+    // Extract month from the date (Format: 'YYYY-MM')
+    const month = new Date(date).toISOString().slice(0, 7);
 
-    // Create new appointment instance
-    const newAppointment = new Appointment({
-      professional: {
-        name: professional.name,
-        profession: professional.profession,
-        specialty: professional.specialty,
-        phone: professional.phone,
-        clinicOrGym: professional.clinicOrGym,
-      },
-      user: {
-        name: user.name,
-        email: user.email,
-        age: user.age,
-      },
+    // Check if the time slot is available
+    const availability = await ProfessionalAvailability.findOne({
+      professionalId,
       date,
-      duration,
-      status,
-      time: parsedTime,
-      reason,
+      "timeSlots.startTime": timeSlot.startTime,
+      "timeSlots.endTime": timeSlot.endTime,
+      "timeSlots.isBooked": false, // Check if the slot is not already booked
     });
 
-    // Save the appointment to the database
-    const savedAppointment = await newAppointment.save();
+    // If the time slot is not available
+    if (!availability) {
+      throw new ValidationError("Selected time slot is not available.");
+    }
 
-    // Send a response back indicating success
-    res.status(201).json({
+    // Create the appointment with the month field
+    const appointment = await Appointment.create({
+      userId,
+      professionalId,
+      date,
+      month, // Store the month based on the date
+      timeSlot,
+      status: "Confirmed", // Mark the appointment as confirmed
+    });
+
+    // Update the availability to mark the time slot as booked
+    await ProfessionalAvailability.updateOne(
+      {
+        _id: availability._id,
+        "timeSlots.startTime": timeSlot.startTime,
+        "timeSlots.endTime": timeSlot.endTime,
+      },
+      { $set: { "timeSlots.$.isBooked": true } } // Mark the slot as booked
+    );
+
+    // Send the confirmation response
+    return res.status(201).json({
       success: true,
-      message: "Appointment created successfully",
-      appointment: savedAppointment,
+      response_message: "Appointment booked successfully.",
+      data: appointment,
     });
   } catch (error) {
     next(error);
   }
 };
 
+
 // Update appointment status
 exports.updateAppointmentStatus = async (req, res, next) => {
   try {
+    const { userId } = req.user; // Extract userId from the decoded token
     const appointmentId = req.params.appointmentId;
     const { status } = req.body;
 
@@ -81,27 +76,37 @@ exports.updateAppointmentStatus = async (req, res, next) => {
       throw new ValidationError("Appointment ID and status are required");
     }
 
-    // Find the appointment by ID and update the status
-    const updatedAppointment = await Appointment.findByIdAndUpdate(
-      appointmentId,
-      { status },
-      { new: true }
-    );
-
-    if (!updatedAppointment) {
+    // Find the appointment by ID
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
       throw new ValidationError("Appointment not found");
     }
 
-    // Send a response back indicating success
-   return res.status(200).json({
+    // Ensure the user is either the creator of the appointment or the assigned professional
+    if (
+      userId !== appointment.userId.toString() &&
+      userId !== appointment.professionalId.toString()
+    ) {
+      throw new ValidationError(
+        "You are not authorized to update this appointment"
+      );
+    }
+
+    // Update the status
+    appointment.status = status;
+    await appointment.save();
+
+    // Send the success response
+    return res.status(200).json({
       success: true,
       message: "Appointment status updated successfully",
-      appointment: updatedAppointment,
+      appointment,
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 // Get all appointments for a specific user
 exports.getAllAppointmentsForUser = async (req, res, next) => {
@@ -133,6 +138,51 @@ exports.getAllAppointmentsForUser = async (req, res, next) => {
     next(error);
   }
 };
+
+
+exports.getBookedAppointments = async (req, res, next) => {
+  try {
+    const { professionalId, month, date } = req.query;
+
+    // Build query object based on provided filters (if any)
+    const query = {
+      status: "Confirmed", // Only fetch confirmed appointments
+    };
+
+    // Add professionalId filter if provided
+    if (professionalId) {
+      query.professionalId = professionalId;
+    }
+
+    // Add month filter if provided
+    if (month) {
+      query.month = month;
+    }
+
+    // Add date filter if provided (assuming date format is 'YYYY-MM-DD')
+    if (date) {
+      query.date = new Date(date); // Ensure the date is correctly formatted
+    }
+
+    // Fetch the appointments based on the query
+    const appointments = await Appointment.find(query)
+      .populate("userId", "name email") // Optional: populate user details (name, email)
+      .populate("professionalId", "name specialty"); // Optional: populate professional details
+
+    if (!appointments.length) {
+      throw new NotFoundError("No booked appointments found.");
+    }
+
+    // Return the list of appointments
+    return res.status(200).json({
+      success: true,
+      data: appointments,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 
 

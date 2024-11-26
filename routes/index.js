@@ -5,4 +5,5 @@ router.use(require("./appointmentRoute"));
 router.use(require("./period"));
 router.use(require("./fitness_diet_Route"));
 router.use(require("./healthTipRoute"));
+router.use(require('./availableRoute'))
 module.exports = router;
